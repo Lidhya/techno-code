@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Browser-based 4-on-the-floor techno generator. All sounds synthesized with the Web Audio API." />
+  <title>TECHNO-CODE — Warehouse Engine</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23090a0c'/%3E%3Ccircle cx='16' cy='16' r='10' fill='none' stroke='%23c6ff00' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%23ff2bd6'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <!-- -------------------------------------------------------------------------
+         Header: identity, live visualizer, and transport / master controls.
+         Play is the AudioContext resume gesture required by browser autoplay policy.
+         ------------------------------------------------------------------------- -->
+    <header class="deck-header">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <span class="ring"></span>
+          <span class="ring"></span>
+          <span class="dot"></span>
+        </div>
+        <div class="brand-text">
+          <p class="eyebrow">Procedural warehouse engine</p>
+          <h1>TECHNO-CODE</h1>
+          <p class="tagline">4-on-the-floor · 16-step · zero samples</p>
+        </div>
+      </div>
+
+      <div class="viz-wrap">
+        <canvas id="visualizer" width="640" height="72" aria-hidden="true"></canvas>
+        <div class="viz-label">MASTER BUS</div>
+      </div>
+
+      <div class="transport" role="group" aria-label="Transport and master">
+        <button id="play-btn" class="play-btn" type="button" aria-pressed="false" title="Play or stop (Space)">
+          <span class="play-icon" aria-hidden="true"></span>
+          <span class="play-label">PLAY</span>
+        </button>
+
+        <label class="control bpm-control">
+          <span class="control-label">BPM</span>
+          <span class="control-value" id="bpm-readout">132</span>
+          <input id="bpm" type="range" min="120" max="150" value="132" step="1" aria-valuemin="120" aria-valuemax="150" />
+        </label>
+
+        <label class="control master-control">
+          <span class="control-label">MASTER</span>
+          <span class="control-value" id="master-readout">75%</span>
+          <input id="master" type="range" min="0" max="100" value="75" step="1" />
+        </label>
+      </div>
+    </header>
+
+    <!-- -------------------------------------------------------------------------
+         16-step matrix. Rows = instruments, columns = 16th notes in one 4/4 bar.
+         Grid cells are generated in app.js so track config stays in one place.
+         ------------------------------------------------------------------------- -->
+    <section class="panel sequencer-panel" aria-label="16-step sequencer">
+      <div class="panel-head">
+        <h2>SEQUENCER</h2>
+        <div class="panel-actions">
+          <label class="preset-label">
+            PATTERN
+            <select id="preset" aria-label="Load a pattern preset">
+              <option value="warehouse">Warehouse</option>
+              <option value="berlin">Berlin Afterhours</option>
+              <option value="industrial">Industrial</option>
+              <option value="detroit">Detroit</option>
+            </select>
+          </label>
+          <button id="generate-btn" type="button">GENERATE</button>
+          <button id="clear-btn" type="button">CLEAR</button>
+        </div>
+      </div>
+
+      <div class="seq-scroll">
+        <div class="step-ruler" id="step-ruler" aria-hidden="true"></div>
+        <div id="grid" class="grid" role="grid" aria-label="Instrument step grid"></div>
+      </div>
+    </section>
+
+    <!-- -------------------------------------------------------------------------
+         Real-time DSP / synth parameter panel. All values map onto live AudioParams.
+         ------------------------------------------------------------------------- -->
+    <section class="panel param-panel" aria-label="Sound and effects controls">
+      <div class="panel-head">
+        <h2>SIGNAL PATH</h2>
+        <p class="panel-note">Tweaks apply immediately while the loop is running.</p>
+      </div>
+
+      <div class="param-grid">
+        <fieldset class="param-group acid-group">
+          <legend>ACID / 303</legend>
+          <label class="control">
+            <span class="control-label">CUTOFF</span>
+            <span class="control-value" id="cutoff-readout">900 Hz</span>
+            <input id="cutoff" type="range" min="120" max="6000" value="900" step="10" />
+          </label>
+          <label class="control">
+            <span class="control-label">RESONANCE</span>
+            <span class="control-value" id="resonance-readout">12.0</span>
+            <input id="resonance" type="range" min="0.5" max="22" value="12" step="0.1" />
+          </label>
+        </fieldset>
+
+        <fieldset class="param-group grit-group">
+          <legend>GRIT</legend>
+          <label class="control">
+            <span class="control-label">DISTORTION</span>
+            <span class="control-value" id="drive-readout">28%</span>
+            <input id="drive" type="range" min="0" max="100" value="28" step="1" />
+          </label>
+          <label class="control">
+            <span class="control-label">SWING</span>
+            <span class="control-value" id="swing-readout">8%</span>
+            <input id="swing" type="range" min="0" max="40" value="8" step="1" />
+          </label>
+        </fieldset>
+
+        <fieldset class="param-group space-group">
+          <legend>SPACE</legend>
+          <label class="control">
+            <span class="control-label">REVERB</span>
+            <span class="control-value" id="reverb-readout">22%</span>
+            <input id="reverb" type="range" min="0" max="100" value="22" step="1" />
+          </label>
+          <label class="control">
+            <span class="control-label">DELAY FB</span>
+            <span class="control-value" id="feedback-readout">35%</span>
+            <input id="feedback" type="range" min="0" max="85" value="35" step="1" />
+          </label>
+          <div class="delay-sync" role="group" aria-label="Delay note division">
+            <span class="control-label">DELAY SYNC</span>
+            <div class="toggle-pair">
+              <button type="button" class="sync-btn is-active" data-division="8" aria-pressed="true">1/8</button>
+              <button type="button" class="sync-btn" data-division="16" aria-pressed="false">1/16</button>
+            </div>
+          </div>
+        </fieldset>
+      </div>
+    </section>
+
+    <footer class="deck-footer">
+      <p>Sine kick · sidechained sub · noise hats · resonant saw acid · stereo delay · convolution reverb</p>
+      <p class="kbd-hint"><kbd>Space</kbd> play / stop</p>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
