@@ -37,6 +37,8 @@
     { id: "closedHat", name: "CH HAT", color: "#00e5ff" },
     { id: "openHat", name: "OH HAT", color: "#2dffc4" },
     { id: "clap", name: "CLAP", color: "#ffc400" },
+    { id: "perc", name: "PERC", color: "#ff7a18" },
+    { id: "shaker", name: "SHAKER", color: "#9dff6a" },
     { id: "acid", name: "ACID", color: "#c6ff00" },
   ];
 
@@ -51,6 +53,8 @@
       openHat: [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1],
       clap: [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
       acid: [1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1],
+      perc: [0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0],
+      shaker: [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
       notes: [A2, A2, C3, A2, E3, D3, A2, G3, A2, A2, C3, G2, E3, D3, A3, G3],
     },
     berlin: {
@@ -60,6 +64,8 @@
       openHat: [0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0],
       clap: [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0],
       acid: [1, 0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 1],
+      perc: [0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0],
+      shaker: [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
       notes: [A2, A2, A2, C3, A2, A2, E3, E3, D3, C3, A2, A2, G2, G2, A2, E2],
     },
     industrial: {
@@ -69,6 +75,8 @@
       openHat: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1],
       clap: [0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0],
       acid: [1, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1],
+      perc: [1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1],
+      shaker: [0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1],
       notes: [E2, A2, A2, C3, E2, D3, A2, A2, E3, A2, C3, G2, A2, D3, G3, A3],
     },
     detroit: {
@@ -78,6 +86,8 @@
       openHat: [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
       clap: [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
       acid: [1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0],
+      perc: [0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0],
+      shaker: [0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0],
       notes: [A2, C3, E3, A2, A3, G3, E3, D3, C3, A2, G2, A2, E3, D3, C3, A2],
     },
   };
@@ -97,8 +107,11 @@
     muted: Object.fromEntries(TRACKS.map((track) => [track.id, false])),
     pattern: clonePattern(PRESETS.warehouse),
     notes: PRESETS.warehouse.notes.slice(),
+    bassNotes: null,
     openHatGain: null,
     busStep: -1,
+    composer: null,
+    barsUntilEvolve: 0,
   };
 
   // Terminal feed for the master-bus overlay. Pattern bits stay in sync with the grid.
@@ -155,6 +168,11 @@
     pattern.clap[4] = 1;
     pattern.clap[12] = 1;
     if (Math.random() < 0.3) pattern.clap[10] = 1;
+
+    for (let i = 0; i < STEPS; i += 1) {
+      pattern.perc[i] = i % 4 !== 0 && Math.random() < 0.28 ? 1 : 0;
+      pattern.shaker[i] = i % 2 === 1 && Math.random() < 0.7 ? 1 : 0;
+    }
 
     const notes = new Array(STEPS).fill(A2).map(() => ACID_SCALE[Math.floor(Math.random() * ACID_SCALE.length)]);
     return { pattern, notes };
@@ -290,6 +308,10 @@
     clapGain.gain.value = 0.42;
     clapGain.connect(masterGain);
 
+    const percGain = ctx.createGain();
+    percGain.gain.value = 0.38;
+    percGain.connect(masterGain);
+
     const acidFilter = ctx.createBiquadFilter();
     acidFilter.type = "lowpass";
     acidFilter.frequency.value = params.cutoff;
@@ -358,9 +380,11 @@
     acidOut.connect(delaySend);
     clapGain.connect(delaySend);
     hatGain.connect(delaySend);
+    percGain.connect(delaySend);
     acidOut.connect(reverbSend);
     clapGain.connect(reverbSend);
     hatGain.connect(reverbSend);
+    percGain.connect(reverbSend);
     subOut.connect(reverbSend);
 
     Object.assign(nodes, {
@@ -373,6 +397,7 @@
       subOut,
       hatGain,
       clapGain,
+      percGain,
       acidFilter,
       acidDrive,
       acidOut,
@@ -478,7 +503,9 @@
     const osc = ctx.createOscillator();
     const filter = ctx.createBiquadFilter();
     const gain = ctx.createGain();
-    const freq = step % 8 === 6 ? E2 : 55;
+    const freq = state.bassNotes && state.bassNotes[step]
+      ? state.bassNotes[step]
+      : (step % 8 === 6 ? E2 : 55);
     osc.type = "sawtooth";
     osc.frequency.setValueAtTime(freq, time);
     filter.type = "lowpass";
@@ -579,6 +606,45 @@
   }
 
   /**
+   * Tribal tom / conga: two mid pitches, short decay so the kick stays clear.
+   */
+  function playPerc(time, step) {
+    if (!nodes.percGain) return;
+    const ctx = state.ctx;
+    const osc = ctx.createOscillator();
+    const filter = ctx.createBiquadFilter();
+    const gain = ctx.createGain();
+    const panner = ctx.createStereoPanner();
+    const high = step % 8 < 4;
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(high ? 196 : 147, time);
+    osc.frequency.exponentialRampToValueAtTime(high ? 130 : 98, time + 0.08);
+    filter.type = "bandpass";
+    filter.frequency.value = high ? 420 : 280;
+    filter.Q.value = 3.2;
+    panner.pan.value = high ? -0.35 : 0.4;
+    expGain(gain.gain, time, 0.7, 0.14);
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(panner);
+    panner.connect(nodes.percGain);
+    osc.start(time);
+    osc.stop(time + 0.18);
+    disposeOnEnded(osc, osc, filter, gain, panner);
+  }
+
+  function playShaker(time) {
+    playNoiseBurst(time, {
+      highpass: 8200,
+      q: 0.7,
+      peak: 0.32,
+      decay: 0.035,
+      pan: Math.random() * 0.5 - 0.25,
+      dest: nodes.hatGain,
+    });
+  }
+
+  /**
    * Resonant saw lead through the shared modulated LPF (303-style).
    * Each note retriggers a cutoff envelope on the shared filter.
    */
@@ -620,6 +686,8 @@
     if (pattern.closedHat[step] && !state.muted.closedHat) playClosedHat(time);
     if (pattern.openHat[step] && !state.muted.openHat) playOpenHat(time);
     if (pattern.clap[step] && !state.muted.clap) playClap(time);
+    if (pattern.perc && pattern.perc[step] && !state.muted.perc) playPerc(time, step);
+    if (pattern.shaker && pattern.shaker[step] && !state.muted.shaker) playShaker(time);
     if (pattern.acid[step] && !state.muted.acid) playAcid(time, state.notes[step] || A2);
   }
 
@@ -640,6 +708,9 @@
       scheduleVisual(step, time);
       state.nextStepTime += stepDuration(step);
       state.currentStep = (step + 1) % STEPS;
+      if (state.currentStep === 0) {
+        onBarComplete();
+      }
     }
     state.timerId = window.setTimeout(scheduler, LOOKAHEAD_MS);
   }
@@ -679,6 +750,108 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Hardgroove composer — applies snapshots from hardgroove.js and evolves
+  // on completed bars using 4 / 8 / 16 / 32 phrase lengths.
+  // ---------------------------------------------------------------------------
+  function readComposerControls() {
+    return {
+      groove: Number(els.groove.value) / 100,
+      randomness: Number(els.randomness.value) / 100,
+      hardgroove: Number(els.hardgroove.value) / 100,
+      evolution: Number(els.evolution.value) / 100,
+    };
+  }
+
+  function setSlider(input, readout, value, suffix) {
+    input.value = String(value);
+    readout.textContent = suffix ? value + suffix : String(value);
+  }
+
+  function applySnapshot(snapshot, reason) {
+    state.pattern = snapshot.pattern;
+    state.notes = snapshot.notes;
+    state.bassNotes = snapshot.bassNotes;
+    state.bpm = snapshot.bpm;
+    state.swing = snapshot.swing;
+    params.cutoff = snapshot.fx.cutoff;
+    params.resonance = snapshot.fx.resonance;
+    params.drive = snapshot.fx.drive;
+    params.reverb = snapshot.fx.reverb;
+    params.feedback = snapshot.fx.feedback;
+    state.barsUntilEvolve = snapshot.nextInterval;
+
+    setSlider(els.bpm, els.bpmReadout, snapshot.bpm, "");
+    setSlider(els.swing, els.swingReadout, Math.round(snapshot.swing * 100), "%");
+    setSlider(els.cutoff, els.cutoffReadout, Math.round(snapshot.fx.cutoff), " Hz");
+    els.resonance.value = String(snapshot.fx.resonance);
+    els.resonanceReadout.textContent = Number(snapshot.fx.resonance).toFixed(1);
+    setSlider(els.drive, els.driveReadout, Math.round(snapshot.fx.drive * 100), "%");
+    setSlider(els.reverb, els.reverbReadout, Math.round(snapshot.fx.reverb * 100), "%");
+    setSlider(els.feedback, els.feedbackReadout, Math.round(snapshot.fx.feedback * 100), "%");
+
+    applyLiveParams();
+    syncDelayTime();
+    renderGrid();
+    updateComposerHud(snapshot, reason);
+    pushBusLine((reason || "CMP") + " " + snapshot.phase + " " + packedPatternBits());
+  }
+
+  function updateComposerHud(snapshot, reason) {
+    if (!els.composerSeed) return;
+    const session = state.composer;
+    const phase = (snapshot && snapshot.phase) || (session && session.phase) || "—";
+    const seed = session ? session.seed.toString(16).toUpperCase() : "—";
+    const motif = (snapshot && snapshot.motif) || "—";
+    const barsLeft = state.barsUntilEvolve;
+    const move = (snapshot && snapshot.lastMove) || reason || "";
+    els.composerSeed.textContent = seed;
+    els.composerPhase.textContent = phase;
+    els.composerMotif.textContent = motif;
+    els.composerNext.textContent = session && session.active
+      ? barsLeft + " bars"
+      : "—";
+    els.composerStatus.textContent = session && session.active
+      ? "Live · " + phase + (move ? " · " + move : "") + " · bar " + (session.bar || 0)
+      : "Idle — press COMPOSE HARDGROOVE to seed a new track.";
+  }
+
+  function stopComposer(silent) {
+    if (state.composer) state.composer.active = false;
+    state.barsUntilEvolve = 0;
+    if (!silent) updateComposerHud(null, "off");
+  }
+
+  function onBarComplete() {
+    if (!state.composer || !state.composer.active) return;
+    state.composer.bar += 1;
+    state.barsUntilEvolve -= 1;
+    updateComposerHud({
+      phase: state.composer.phase,
+      motif: state.composer.motif.degrees.join("-"),
+      lastMove: "",
+    });
+    if (state.barsUntilEvolve > 0) return;
+    if (typeof window.Hardgroove === "undefined") return;
+    const snapshot = window.Hardgroove.evolve(state.composer, readComposerControls());
+    applySnapshot(snapshot, "EVO");
+  }
+
+  async function composeHardgroove() {
+    if (typeof window.Hardgroove === "undefined") return;
+    const snapshot = window.Hardgroove.compose(readComposerControls());
+    state.composer = snapshot.session;
+    applySnapshot(snapshot, "SEED");
+    if (!state.playing) {
+      await start();
+      return;
+    }
+    state.currentStep = 0;
+    if (state.ctx) {
+      state.nextStepTime = state.ctx.currentTime + 0.05;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // UI — grid, readouts, visualizer
   // ---------------------------------------------------------------------------
   const els = {
@@ -688,7 +861,21 @@
     ruler: document.getElementById("step-ruler"),
     preset: document.getElementById("preset"),
     generateBtn: document.getElementById("generate-btn"),
+    composeBtn: document.getElementById("compose-btn"),
     clearBtn: document.getElementById("clear-btn"),
+    composerStatus: document.getElementById("composer-status"),
+    composerSeed: document.getElementById("composer-seed"),
+    composerPhase: document.getElementById("composer-phase"),
+    composerMotif: document.getElementById("composer-motif"),
+    composerNext: document.getElementById("composer-next"),
+    groove: document.getElementById("groove"),
+    grooveReadout: document.getElementById("groove-readout"),
+    randomness: document.getElementById("randomness"),
+    randomnessReadout: document.getElementById("randomness-readout"),
+    hardgroove: document.getElementById("hardgroove"),
+    hardgrooveReadout: document.getElementById("hardgroove-readout"),
+    evolution: document.getElementById("evolution"),
+    evolutionReadout: document.getElementById("evolution-readout"),
     canvas: document.getElementById("visualizer"),
     busCode: document.getElementById("bus-code"),
     bpm: document.getElementById("bpm"),
@@ -823,10 +1010,13 @@
   }
 
   function loadPreset(name) {
+    stopComposer(true);
     const preset = PRESETS[name] || PRESETS.warehouse;
     state.pattern = clonePattern(preset);
     state.notes = preset.notes.slice();
+    state.bassNotes = null;
     renderGrid();
+    updateComposerHud(null, "preset");
     pushBusLine("LOAD " + name + " " + packedPatternBits());
   }
 
@@ -1027,18 +1217,38 @@
     });
 
     els.generateBtn.addEventListener("click", () => {
+      stopComposer(true);
       const generated = generatePattern();
       state.pattern = generated.pattern;
       state.notes = generated.notes;
+      state.bassNotes = null;
       renderGrid();
+      updateComposerHud(null, "gen");
       pushBusLine("GEN " + packedPatternBits());
     });
 
+    els.composeBtn.addEventListener("click", () => {
+      composeHardgroove();
+    });
+
     els.clearBtn.addEventListener("click", () => {
+      stopComposer(true);
       state.pattern = emptyPattern();
+      state.bassNotes = null;
       renderGrid();
+      updateComposerHud(null, "clr");
       pushBusLine("CLR " + packedPatternBits());
     });
+
+    const bindPercent = (input, readout) => {
+      input.addEventListener("input", () => {
+        readout.textContent = input.value + "%";
+      });
+    };
+    bindPercent(els.groove, els.grooveReadout);
+    bindPercent(els.randomness, els.randomnessReadout);
+    bindPercent(els.hardgroove, els.hardgrooveReadout);
+    bindPercent(els.evolution, els.evolutionReadout);
 
     bindGridPaint();
     window.addEventListener("resize", sizeCanvas);
@@ -1052,4 +1262,5 @@
   renderGrid();
   bindControls();
   renderBusOverlay();
+  sizeCanvas();
 })();

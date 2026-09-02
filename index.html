@@ -16,7 +16,7 @@
          Master bus keeps the frequency bars and overlays a live 0/1 dump of the sequencer.
          ------------------------------------------------------------------------- -->
     <header class="deck-header">
-      <div class="brand">
+      <!-- <div class="brand">
         <div class="brand-mark" aria-hidden="true">
           <span class="ring"></span>
           <span class="ring"></span>
@@ -27,12 +27,12 @@
           <h1>TECHNO-CODE</h1>
           <p class="tagline">4-on-the-floor · 16-step · zero samples</p>
         </div>
-      </div>
+      </div> -->
 
       <div class="viz-wrap">
-        <canvas id="visualizer" width="640" height="160" aria-hidden="true"></canvas>
+        <canvas id="visualizer" width="1920" height="300" aria-hidden="true"></canvas>
         <pre id="bus-code" class="bus-code" aria-hidden="true"></pre>
-        <div class="viz-label">MASTER BUS</div>
+        <div class="viz-label">Techno-Code</div>
       </div>
 
       <div class="transport" role="group" aria-label="Transport and master">
@@ -73,6 +73,7 @@
             </select>
           </label>
           <button id="generate-btn" type="button">GENERATE</button>
+          <button id="compose-btn" type="button" class="compose-btn">COMPOSE HARDGROOVE</button>
           <button id="clear-btn" type="button">CLEAR</button>
         </div>
       </div>
@@ -80,6 +81,45 @@
       <div class="seq-scroll">
         <div class="step-ruler" id="step-ruler" aria-hidden="true"></div>
         <div id="grid" class="grid" role="grid" aria-label="Instrument step grid"></div>
+      </div>
+    </section>
+
+    <!-- -------------------------------------------------------------------------
+         Hardgroove composer. Seeded generation + phrase-length evolution.
+         Play / stop stay on the header; this panel only drives the generator.
+         ------------------------------------------------------------------------- -->
+    <section class="panel composer-panel" aria-label="Hardgroove composer">
+      <div class="panel-head">
+        <h2>COMPOSER</h2>
+        <p class="panel-note" id="composer-status">Idle — press COMPOSE HARDGROOVE to seed a new track.</p>
+      </div>
+      <div class="composer-meta" aria-live="polite">
+        <div><span class="meta-label">SEED</span><code id="composer-seed">—</code></div>
+        <div><span class="meta-label">PHASE</span><strong id="composer-phase">—</strong></div>
+        <div><span class="meta-label">MOTIF</span><strong id="composer-motif">—</strong></div>
+        <div><span class="meta-label">NEXT</span><strong id="composer-next">—</strong></div>
+      </div>
+      <div class="param-grid composer-grid">
+        <label class="control">
+          <span class="control-label">GROOVE</span>
+          <span class="control-value" id="groove-readout">62%</span>
+          <input id="groove" type="range" min="0" max="100" value="62" step="1" />
+        </label>
+        <label class="control">
+          <span class="control-label">RANDOMNESS</span>
+          <span class="control-value" id="randomness-readout">40%</span>
+          <input id="randomness" type="range" min="0" max="100" value="40" step="1" />
+        </label>
+        <label class="control">
+          <span class="control-label">HARDGROOVE</span>
+          <span class="control-value" id="hardgroove-readout">70%</span>
+          <input id="hardgroove" type="range" min="0" max="100" value="70" step="1" />
+        </label>
+        <label class="control">
+          <span class="control-label">EVOLUTION</span>
+          <span class="control-value" id="evolution-readout">55%</span>
+          <input id="evolution" type="range" min="0" max="100" value="55" step="1" />
+        </label>
       </div>
     </section>
 
@@ -145,11 +185,12 @@
     </section>
 
     <footer class="deck-footer">
-      <p>Sine kick · sidechained sub · noise hats · resonant saw acid · stereo delay · convolution reverb</p>
+      <p>Sine kick · tribal perc · shaker · sidechained sub · motif acid · evolving hardgroove composer</p>
       <p class="kbd-hint"><kbd>Space</kbd> play / stop</p>
     </footer>
   </div>
 
+  <script src="hardgroove.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

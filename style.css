@@ -61,7 +61,8 @@ body::after {
 }
 
 .app {
-  width: min(1180px, calc(100% - 32px));
+  width: calc(100% - 32px);
+  max-width: none;
   margin: 24px auto 48px;
   display: flex;
   flex-direction: column;
@@ -74,7 +75,7 @@ body::after {
 
 .deck-header {
   display: grid;
-  grid-template-columns: minmax(180px, 1.1fr) minmax(180px, 1.4fr) minmax(240px, 1.2fr);
+  grid-template-columns: 1fr;
   gap: 16px;
   align-items: stretch;
   padding: 18px 20px;
@@ -136,18 +137,22 @@ h1 {
 }
 
 .viz-wrap {
+  grid-column: 1 / -1;
+  width: 100%;
+  max-width: 100%;
   position: relative;
   background: #000;
   border: 1px solid var(--line-soft);
   border-radius: 8px;
   overflow: hidden;
-  min-height: 160px;
+  min-height: 300px;
 }
 
 #visualizer {
   display: block;
   width: 100%;
-  height: 160px;
+  max-width: 100%;
+  height: 300px;
   opacity: 0.5;
 }
 
@@ -326,6 +331,53 @@ select,
 .sync-btn:hover,
 select:hover {
   border-color: var(--cyan);
+}
+
+.compose-btn {
+  background: linear-gradient(180deg, #2a3310, #161c08);
+  border-color: var(--lime);
+  color: var(--lime);
+  font-weight: 700;
+}
+
+.compose-btn:hover {
+  border-color: var(--lime);
+  box-shadow: var(--glow-lime);
+}
+
+.composer-meta {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.composer-meta > div {
+  background: var(--inset);
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  padding: 8px 10px;
+  min-width: 0;
+}
+
+.meta-label {
+  display: block;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  color: var(--dim);
+  margin-bottom: 4px;
+}
+
+.composer-meta code,
+.composer-meta strong {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--lime);
+  word-break: break-all;
+}
+
+.composer-grid {
+  grid-template-columns: repeat(4, 1fr);
 }
 
 .panel-actions button:focus-visible,
@@ -595,9 +647,10 @@ kbd {
    ----------------------------------------------------------------------------- */
 
 @media (max-width: 900px) {
-  .deck-header,
-  .param-grid {
-    grid-template-columns: 1fr;
+  .param-grid,
+  .composer-grid,
+  .composer-meta {
+    grid-template-columns: 1fr 1fr;
   }
 
   .transport {
@@ -611,11 +664,13 @@ kbd {
 
 @media (max-width: 560px) {
   .app {
-    width: min(100% - 16px, 1180px);
+    width: calc(100% - 16px);
     margin-top: 12px;
   }
 
-  .transport {
+  .transport,
+  .composer-grid,
+  .composer-meta {
     grid-template-columns: 1fr;
     justify-items: start;
   }
