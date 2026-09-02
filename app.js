@@ -112,6 +112,9 @@
     busStep: -1,
     composer: null,
     barsUntilEvolve: 0,
+    chordNotes: null,
+    noteDecay: null,
+    acidDecay: 0.1136,
   };
 
   // Terminal feed for the master-bus overlay. Pattern bits stay in sync with the grid.
@@ -646,27 +649,32 @@
 
   /**
    * Resonant saw lead through the shared modulated LPF (303-style).
-   * Each note retriggers a cutoff envelope on the shared filter.
+   * Decay is locked to 16th-note multiples so Beethoven-style cells sit on the grid.
+   * Extra partials (when present) voice minor-triad / dim7 stabs.
    */
-  function playAcid(time, freq) {
+  function playAcid(time, freq, extras, decayHint) {
     const ctx = state.ctx;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = "sawtooth";
-    osc.frequency.setValueAtTime(freq, time);
-    expGain(gain.gain, time, 0.85, 0.18);
-    osc.connect(gain);
-    gain.connect(nodes.acidFilter);
-    osc.start(time);
-    osc.stop(time + 0.22);
-    disposeOnEnded(osc, osc, gain);
+    const decay = Math.max(0.04, decayHint || state.acidDecay || sixteenthDuration());
+    const voices = [freq].concat(extras || []).filter((hz, index, list) => hz && list.indexOf(hz) === index);
+    voices.forEach((hz, index) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(hz, time);
+      expGain(gain.gain, time, index === 0 ? 0.85 : 0.42, decay);
+      osc.connect(gain);
+      gain.connect(nodes.acidFilter);
+      osc.start(time);
+      osc.stop(time + decay + 0.04);
+      disposeOnEnded(osc, osc, gain);
+    });
 
     const cutoff = params.cutoff;
     const peak = Math.min(cutoff * 3.2, 9000);
     const floor = Math.max(cutoff * 0.55, 80);
     nodes.acidFilter.frequency.cancelScheduledValues(time);
     nodes.acidFilter.frequency.setValueAtTime(peak, time);
-    nodes.acidFilter.frequency.exponentialRampToValueAtTime(floor, time + 0.16);
+    nodes.acidFilter.frequency.exponentialRampToValueAtTime(floor, time + decay);
   }
 
   // ---------------------------------------------------------------------------
@@ -688,7 +696,11 @@
     if (pattern.clap[step] && !state.muted.clap) playClap(time);
     if (pattern.perc && pattern.perc[step] && !state.muted.perc) playPerc(time, step);
     if (pattern.shaker && pattern.shaker[step] && !state.muted.shaker) playShaker(time);
-    if (pattern.acid[step] && !state.muted.acid) playAcid(time, state.notes[step] || A2);
+    if (pattern.acid[step] && !state.muted.acid) {
+      const extras = state.chordNotes && state.chordNotes[step] ? state.chordNotes[step] : null;
+      const decay = state.noteDecay && state.noteDecay[step] ? state.noteDecay[step] : state.acidDecay;
+      playAcid(time, state.notes[step] || A2, extras, decay);
+    }
   }
 
   function scheduleVisual(step, time) {
@@ -767,10 +779,21 @@
     readout.textContent = suffix ? value + suffix : String(value);
   }
 
+  function setDelayDivision(division) {
+    state.delayDivision = division;
+    document.querySelectorAll(".sync-btn").forEach((btn) => {
+      const active = Number(btn.dataset.division) === division;
+      btn.classList.toggle("is-active", active);
+      btn.setAttribute("aria-pressed", active ? "true" : "false");
+    });
+  }
+
   function applySnapshot(snapshot, reason) {
     state.pattern = snapshot.pattern;
     state.notes = snapshot.notes;
     state.bassNotes = snapshot.bassNotes;
+    state.chordNotes = snapshot.chordNotes || null;
+    state.noteDecay = snapshot.noteDecay || null;
     state.bpm = snapshot.bpm;
     state.swing = snapshot.swing;
     params.cutoff = snapshot.fx.cutoff;
@@ -778,6 +801,8 @@
     params.drive = snapshot.fx.drive;
     params.reverb = snapshot.fx.reverb;
     params.feedback = snapshot.fx.feedback;
+    state.acidDecay = snapshot.fx.acidDecay || sixteenthDuration();
+    if (snapshot.fx.delayDivision) setDelayDivision(snapshot.fx.delayDivision);
     state.barsUntilEvolve = snapshot.nextInterval;
 
     setSlider(els.bpm, els.bpmReadout, snapshot.bpm, "");
@@ -804,8 +829,9 @@
     const motif = (snapshot && snapshot.motif) || "—";
     const barsLeft = state.barsUntilEvolve;
     const move = (snapshot && snapshot.lastMove) || reason || "";
+    const harmony = (snapshot && snapshot.harmony) || (session && session.harmony) || "";
     els.composerSeed.textContent = seed;
-    els.composerPhase.textContent = phase;
+    els.composerPhase.textContent = harmony ? phase + " · " + harmony : phase;
     els.composerMotif.textContent = motif;
     els.composerNext.textContent = session && session.active
       ? barsLeft + " bars"
@@ -828,6 +854,7 @@
     updateComposerHud({
       phase: state.composer.phase,
       motif: state.composer.motif.degrees.join("-"),
+      harmony: state.composer.harmony,
       lastMove: "",
     });
     if (state.barsUntilEvolve > 0) return;
@@ -1015,6 +1042,8 @@
     state.pattern = clonePattern(preset);
     state.notes = preset.notes.slice();
     state.bassNotes = null;
+    state.chordNotes = null;
+    state.noteDecay = null;
     renderGrid();
     updateComposerHud(null, "preset");
     pushBusLine("LOAD " + name + " " + packedPatternBits());
@@ -1222,6 +1251,8 @@
       state.pattern = generated.pattern;
       state.notes = generated.notes;
       state.bassNotes = null;
+      state.chordNotes = null;
+      state.noteDecay = null;
       renderGrid();
       updateComposerHud(null, "gen");
       pushBusLine("GEN " + packedPatternBits());
@@ -1235,6 +1266,8 @@
       stopComposer(true);
       state.pattern = emptyPattern();
       state.bassNotes = null;
+      state.chordNotes = null;
+      state.noteDecay = null;
       renderGrid();
       updateComposerHud(null, "clr");
       pushBusLine("CLR " + packedPatternBits());
