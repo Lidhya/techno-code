@@ -18,6 +18,7 @@
   const MIN_BPM = 120;
   const MAX_BPM = 150;
   const NEAR_SILENCE = 0.0008;
+  const BUS_SCROLL_MAX = 16;
 
   const A2 = 110;
   const C3 = 130.81;
@@ -97,7 +98,11 @@
     pattern: clonePattern(PRESETS.warehouse),
     notes: PRESETS.warehouse.notes.slice(),
     openHatGain: null,
+    busStep: -1,
   };
+
+  // Terminal feed for the master-bus overlay. Pattern bits stay in sync with the grid.
+  const busLog = [];
 
   const params = {
     master: 0.75,
@@ -620,7 +625,10 @@
 
   function scheduleVisual(step, time) {
     const delay = Math.max(0, (time - state.ctx.currentTime) * 1000);
-    window.setTimeout(() => highlightPlayhead(step), delay);
+    window.setTimeout(() => {
+      highlightPlayhead(step);
+      logBusStep(step);
+    }, delay);
   }
 
   function scheduler() {
@@ -644,6 +652,7 @@
     state.playing = true;
     state.currentStep = 0;
     state.nextStepTime = ctx.currentTime + 0.06;
+    pushBusLine("RUN bpm=" + state.bpm + " " + packedPatternBits());
     scheduler();
     startVisualizer();
     syncPlayButton();
@@ -656,6 +665,8 @@
       state.timerId = null;
     }
     highlightPlayhead(-1);
+    state.busStep = -1;
+    pushBusLine("STP " + packedPatternBits());
     syncPlayButton();
   }
 
@@ -679,6 +690,7 @@
     generateBtn: document.getElementById("generate-btn"),
     clearBtn: document.getElementById("clear-btn"),
     canvas: document.getElementById("visualizer"),
+    busCode: document.getElementById("bus-code"),
     bpm: document.getElementById("bpm"),
     bpmReadout: document.getElementById("bpm-readout"),
     master: document.getElementById("master"),
@@ -727,6 +739,7 @@
         state.muted[track.id] = !state.muted[track.id];
         mute.classList.toggle("is-muted", state.muted[track.id]);
         mute.setAttribute("aria-pressed", String(state.muted[track.id]));
+        pushBusLine("MUTE " + track.id + "=" + (state.muted[track.id] ? "1" : "0") + " " + trackBits(track.id));
       });
 
       const name = document.createElement("span");
@@ -757,9 +770,11 @@
   }
 
   function setStepCell(btn, trackId, step, value) {
+    if (state.pattern[trackId][step] === value) return;
     state.pattern[trackId][step] = value;
     btn.classList.toggle("on", Boolean(value));
     btn.setAttribute("aria-pressed", String(Boolean(value)));
+    pushBusLine("WR " + trackId + "[" + step + "]=" + value + " " + trackBits(trackId));
   }
 
   function bindGridPaint() {
@@ -812,6 +827,75 @@
     state.pattern = clonePattern(preset);
     state.notes = preset.notes.slice();
     renderGrid();
+    pushBusLine("LOAD " + name + " " + packedPatternBits());
+  }
+
+  // ---------------------------------------------------------------------------
+  // Master-bus terminal overlay.
+  // Frequency bars stay on the canvas; this layer prints live 0/1 pattern data
+  // so sequencer edits and playhead motion are visible as a scrolling dump.
+  // ---------------------------------------------------------------------------
+  function trackBits(trackId) {
+    return state.pattern[trackId].join("");
+  }
+
+  function packedPatternBits() {
+    return TRACKS.map((track) => trackBits(track.id)).join(" ");
+  }
+
+  function groupBits(bits, size) {
+    const chunks = [];
+    for (let i = 0; i < bits.length; i += size) {
+      chunks.push(bits.slice(i, i + size));
+    }
+    return chunks.join(" ");
+  }
+
+  function hitMask(step) {
+    return TRACKS.map((track) => {
+      const armed = state.pattern[track.id][step] && !state.muted[track.id];
+      return armed ? "1" : "0";
+    }).join("");
+  }
+
+  function matrixBlock() {
+    return TRACKS.map((track) => {
+      const mute = state.muted[track.id] ? "M" : ".";
+      return track.name.padEnd(7, " ") + " " + mute + " " + trackBits(track.id);
+    }).join("\n");
+  }
+
+  function pushBusLine(line) {
+    busLog.push(line);
+    if (busLog.length > BUS_SCROLL_MAX) {
+      busLog.shift();
+    }
+    renderBusOverlay();
+  }
+
+  function logBusStep(step) {
+    state.busStep = step;
+    const mask = hitMask(step);
+    const dump = groupBits(packedPatternBits().replace(/ /g, ""), 8);
+    const acidHit = state.pattern.acid[step] && !state.muted.acid;
+    const noteTag = acidHit ? " n=" + Math.round(state.notes[step] || A2) : "";
+    pushBusLine(
+      "s" + String(step + 1).padStart(2, "0") + " " + mask + " " + dump + noteTag
+    );
+  }
+
+  function renderBusOverlay() {
+    if (!els.busCode) return;
+    const stepIndex = state.busStep < 0 ? 0 : state.busStep;
+    const status = state.playing
+      ? "RUN bpm=" + state.bpm + " step=" + String(stepIndex + 1).padStart(2, "0")
+      : "IDL bpm=" + state.bpm;
+    // Caret sits under the 16-bit rows: 7-char name + space + mute + space.
+    const caret = state.busStep >= 0 ? " ".repeat(10 + state.busStep) + "^" : "";
+    const scroll = busLog.length
+      ? busLog.join("\n")
+      : groupBits(packedPatternBits().replace(/ /g, ""), 8);
+    els.busCode.textContent = status + "\n" + matrixBlock() + (caret ? "\n" + caret : "") + "\n" + scroll;
   }
 
   // ---------------------------------------------------------------------------
@@ -838,7 +922,7 @@
     const draw = () => {
       const { width, height } = els.canvas;
       vizCtx.clearRect(0, 0, width, height);
-      vizCtx.fillStyle = "#07080a";
+      vizCtx.fillStyle = "#000000";
       vizCtx.fillRect(0, 0, width, height);
 
       if (nodes.analyser) {
@@ -881,6 +965,7 @@
       state.bpm = bpm;
       els.bpmReadout.textContent = String(bpm);
       syncDelayTime();
+      renderBusOverlay();
     });
 
     els.master.addEventListener("input", () => {
@@ -946,11 +1031,13 @@
       state.pattern = generated.pattern;
       state.notes = generated.notes;
       renderGrid();
+      pushBusLine("GEN " + packedPatternBits());
     });
 
     els.clearBtn.addEventListener("click", () => {
       state.pattern = emptyPattern();
       renderGrid();
+      pushBusLine("CLR " + packedPatternBits());
     });
 
     bindGridPaint();
@@ -964,4 +1051,5 @@
   renderRuler();
   renderGrid();
   bindControls();
+  renderBusOverlay();
 })();

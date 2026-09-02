@@ -13,6 +13,7 @@
     <!-- -------------------------------------------------------------------------
          Header: identity, live visualizer, and transport / master controls.
          Play is the AudioContext resume gesture required by browser autoplay policy.
+         Master bus keeps the frequency bars and overlays a live 0/1 dump of the sequencer.
          ------------------------------------------------------------------------- -->
     <header class="deck-header">
       <div class="brand">
@@ -29,7 +30,8 @@
       </div>
 
       <div class="viz-wrap">
-        <canvas id="visualizer" width="640" height="72" aria-hidden="true"></canvas>
+        <canvas id="visualizer" width="640" height="160" aria-hidden="true"></canvas>
+        <pre id="bus-code" class="bus-code" aria-hidden="true"></pre>
         <div class="viz-label">MASTER BUS</div>
       </div>
 
