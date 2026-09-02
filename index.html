@@ -30,7 +30,7 @@
       </div> -->
 
       <div class="viz-wrap">
-        <canvas id="visualizer" width="1920" height="300" aria-hidden="true"></canvas>
+        <canvas id="visualizer" width="1920" height="400" aria-hidden="true"></canvas>
         <pre id="bus-code" class="bus-code" aria-hidden="true"></pre>
         <div class="viz-label">Techno-Code</div>
       </div>
@@ -74,6 +74,7 @@
           </label>
           <button id="generate-btn" type="button">GENERATE</button>
           <button id="compose-btn" type="button" class="compose-btn">COMPOSE HARDGROOVE</button>
+          <button id="compose-classical-btn" type="button" class="compose-btn compose-btn-classical">CLASSICAL HARDGROOVE</button>
           <button id="clear-btn" type="button">CLEAR</button>
         </div>
       </div>
@@ -85,13 +86,13 @@
     </section>
 
     <!-- -------------------------------------------------------------------------
-         Hardgroove composer. 32-bar Beethoven arc: motif cell, SSSL, V→I, subito drop.
+         Dual composers: Beethoven Hardgroove, or Carnatic Classical Hardgroove (raga + tavil).
          Play / stop stay on the header; this panel only drives the generator.
          ------------------------------------------------------------------------- -->
     <section class="panel composer-panel" aria-label="Hardgroove composer">
       <div class="panel-head">
         <h2>COMPOSER</h2>
-        <p class="panel-note" id="composer-status">Idle — press COMPOSE HARDGROOVE to seed a new track.</p>
+        <p class="panel-note" id="composer-status">Idle — press COMPOSE HARDGROOVE or CLASSICAL HARDGROOVE.</p>
       </div>
       <div class="composer-meta" aria-live="polite">
         <div><span class="meta-label">SEED</span><code id="composer-seed">—</code></div>
@@ -185,12 +186,13 @@
     </section>
 
     <footer class="deck-footer">
-      <p>Sine kick · Fate SSSL cell · C/D minor stabs · 32-bar exposition / development / recap</p>
+      <p>Warehouse Hardgroove · Classical Hardgroove (Mayamalavagowla / Charukesi / Todi)</p>
       <p class="kbd-hint"><kbd>Space</kbd> play / stop</p>
     </footer>
   </div>
 
   <script src="hardgroove.js"></script>
+  <script src="classical.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -462,6 +462,7 @@
     const swing = 0.04 + groove * 0.14;
 
     return {
+      engine: "hardgroove",
       pattern: pattern,
       notes: session.parts.notes.slice(),
       bassNotes: session.parts.bassNotes.slice(),
@@ -529,6 +530,7 @@
     const motif = makeMotif(rng, scale);
     const plan = formPlan(controls.evolution);
     const session = {
+      engine: "hardgroove",
       seed: seed,
       rng: rng,
       scaleName: scaleName,

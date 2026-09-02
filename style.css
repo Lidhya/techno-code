@@ -145,14 +145,14 @@ h1 {
   border: 1px solid var(--line-soft);
   border-radius: 8px;
   overflow: hidden;
-  min-height: 300px;
+  min-height: 400px;
 }
 
 #visualizer {
   display: block;
   width: 100%;
   max-width: 100%;
-  height: 300px;
+  height: 400px;
   opacity: 0.5;
 }
 
@@ -180,7 +180,7 @@ h1 {
   overflow: hidden;
   pointer-events: none;
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: 16px;
   line-height: 1.28;
   letter-spacing: 0.04em;
   color: #00ff41;
@@ -343,6 +343,17 @@ select:hover {
 .compose-btn:hover {
   border-color: var(--lime);
   box-shadow: var(--glow-lime);
+}
+
+.compose-btn-classical {
+  background: linear-gradient(180deg, #3a2410, #1c1208);
+  border-color: #ffb020;
+  color: #ffc85a;
+}
+
+.compose-btn-classical:hover {
+  border-color: #ffc85a;
+  box-shadow: 0 0 18px rgba(255, 176, 32, 0.35);
 }
 
 .composer-meta {

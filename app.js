@@ -29,7 +29,21 @@
   const A3 = 220;
   const E2 = 82.41;
 
-  const ACID_SCALE = [G2, A2, C3, D3, E3, G3, A3];
+  const CLASSICAL_NAMES = {
+    kick: "KICK",
+    sub: "BASS",
+    closedHat: "CH HAT",
+    openHat: "VOX/OH",
+    clap: "PARAI",
+    perc: "TAVIL",
+    shaker: "SHAKER",
+    acid: "RAGA",
+  };
+
+  function trackLabel(track) {
+    if (state.composerKind === "classical") return CLASSICAL_NAMES[track.id] || track.name;
+    return track.name;
+  }
 
   const TRACKS = [
     { id: "kick", name: "KICK", color: "#ff2bd6" },
@@ -115,6 +129,9 @@
     chordNotes: null,
     noteDecay: null,
     acidDecay: 0.1136,
+    composerKind: null,
+    voices: null,
+    leadFrom: 0,
   };
 
   // Terminal feed for the master-bus overlay. Pattern bits stay in sync with the grid.
@@ -315,6 +332,14 @@
     percGain.gain.value = 0.38;
     percGain.connect(masterGain);
 
+    const padGain = ctx.createGain();
+    padGain.gain.value = 0.16;
+    padGain.connect(masterGain);
+
+    const fluteGain = ctx.createGain();
+    fluteGain.gain.value = 0.2;
+    fluteGain.connect(masterGain);
+
     const acidFilter = ctx.createBiquadFilter();
     acidFilter.type = "lowpass";
     acidFilter.frequency.value = params.cutoff;
@@ -384,10 +409,14 @@
     clapGain.connect(delaySend);
     hatGain.connect(delaySend);
     percGain.connect(delaySend);
+    padGain.connect(delaySend);
+    fluteGain.connect(delaySend);
     acidOut.connect(reverbSend);
     clapGain.connect(reverbSend);
     hatGain.connect(reverbSend);
     percGain.connect(reverbSend);
+    padGain.connect(reverbSend);
+    fluteGain.connect(reverbSend);
     subOut.connect(reverbSend);
 
     Object.assign(nodes, {
@@ -401,6 +430,8 @@
       hatGain,
       clapGain,
       percGain,
+      padGain,
+      fluteGain,
       acidFilter,
       acidDrive,
       acidOut,
@@ -648,6 +679,158 @@
   }
 
   /**
+   * Tavil-style folk drum: low pitched slap + leather noise, not a conga tom.
+   */
+  function playTavil(time, step) {
+    if (!nodes.percGain) return;
+    const ctx = state.ctx;
+    const osc = ctx.createOscillator();
+    const filter = ctx.createBiquadFilter();
+    const gain = ctx.createGain();
+    const panner = ctx.createStereoPanner();
+    const low = step % 3 === 0;
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(low ? 92 : 128, time);
+    osc.frequency.exponentialRampToValueAtTime(low ? 62 : 88, time + 0.06);
+    filter.type = "bandpass";
+    filter.frequency.value = low ? 240 : 380;
+    filter.Q.value = 2.4;
+    panner.pan.value = low ? -0.45 : 0.4;
+    expGain(gain.gain, time, 0.78, 0.16);
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(panner);
+    panner.connect(nodes.percGain);
+    osc.start(time);
+    osc.stop(time + 0.2);
+    disposeOnEnded(osc, osc, filter, gain, panner);
+    playNoiseBurst(time, {
+      bandpass: low ? 900 : 1600,
+      q: 1.4,
+      peak: 0.45,
+      decay: 0.05,
+      pan: panner.pan.value,
+      dest: nodes.percGain,
+    });
+  }
+
+  /**
+   * Parai slap: dry mid crack on top of the 4/4, Gopi Sundar folk-snare role.
+   */
+  function playParai(time) {
+    playNoiseBurst(time, {
+      bandpass: 2400,
+      q: 1.8,
+      peak: 0.72,
+      decay: 0.07,
+      pan: 0.12,
+      dest: nodes.clapGain,
+    });
+    playNoiseBurst(time + 0.008, {
+      highpass: 3200,
+      q: 0.8,
+      peak: 0.4,
+      decay: 0.04,
+      pan: -0.2,
+      dest: nodes.clapGain,
+    });
+  }
+
+  /**
+   * Breath flute (Ilaiyaraaja-style acoustic lead). Portamento approximates gamaka.
+   */
+  function playFlute(time, freq, decayHint) {
+    if (!nodes.fluteGain) return;
+    const ctx = state.ctx;
+    const decay = Math.max(0.12, decayHint || sixteenthDuration() * 4);
+    const osc = ctx.createOscillator();
+    const breath = ctx.createOscillator();
+    const filter = ctx.createBiquadFilter();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    breath.type = "triangle";
+    const from = state.leadFrom > 40 ? state.leadFrom : freq;
+    osc.frequency.setValueAtTime(from, time);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(freq, 40), time + 0.045);
+    breath.frequency.setValueAtTime(from * 2, time);
+    breath.frequency.exponentialRampToValueAtTime(Math.max(freq, 40) * 2, time + 0.045);
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(1800, time);
+    filter.Q.value = 1.1;
+    gain.gain.setValueAtTime(NEAR_SILENCE, time);
+    gain.gain.linearRampToValueAtTime(0.55, time + 0.03);
+    gain.gain.exponentialRampToValueAtTime(NEAR_SILENCE, time + decay);
+    osc.connect(filter);
+    breath.connect(filter);
+    filter.connect(gain);
+    gain.connect(nodes.fluteGain);
+    osc.start(time);
+    breath.start(time);
+    osc.stop(time + decay + 0.05);
+    breath.stop(time + decay + 0.05);
+    disposeOnEnded(osc, osc, breath, filter, gain);
+    playNoiseBurst(time, {
+      highpass: 2500,
+      q: 0.6,
+      peak: 0.06,
+      decay: 0.08,
+      pan: -0.1,
+      dest: nodes.fluteGain,
+    });
+    state.leadFrom = freq;
+  }
+
+  /**
+   * Short vocal-grain substitute: stacked formants, used in acoustic intro/break.
+   */
+  function playVocalChop(time) {
+    playNoiseBurst(time, {
+      bandpass: 720,
+      q: 6,
+      peak: 0.38,
+      decay: 0.22,
+      pan: -0.3,
+      dest: nodes.padGain || nodes.hatGain,
+    });
+    playNoiseBurst(time, {
+      bandpass: 1450,
+      q: 5,
+      peak: 0.28,
+      decay: 0.18,
+      pan: 0.28,
+      dest: nodes.padGain || nodes.hatGain,
+    });
+  }
+
+  /**
+   * Rahman-style drone pad. Held across half a bar from raga sa–ga–pa.
+   */
+  function playPad(time, freqs) {
+    if (!nodes.padGain || !freqs || !freqs.length) return;
+    const ctx = state.ctx;
+    const hold = sixteenthDuration() * 8;
+    freqs.forEach((hz, index) => {
+      const osc = ctx.createOscillator();
+      const filter = ctx.createBiquadFilter();
+      const gain = ctx.createGain();
+      osc.type = index === 0 ? "sine" : "triangle";
+      osc.frequency.setValueAtTime(hz, time);
+      filter.type = "lowpass";
+      filter.frequency.value = 900;
+      filter.Q.value = 0.8;
+      gain.gain.setValueAtTime(NEAR_SILENCE, time);
+      gain.gain.linearRampToValueAtTime(0.22, time + 0.12);
+      gain.gain.exponentialRampToValueAtTime(NEAR_SILENCE, time + hold);
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(nodes.padGain);
+      osc.start(time);
+      osc.stop(time + hold + 0.05);
+      disposeOnEnded(osc, osc, filter, gain);
+    });
+  }
+
+  /**
    * Resonant saw lead through the shared modulated LPF (303-style).
    * Decay is locked to 16th-note multiples so Beethoven-style cells sit on the grid.
    * Extra partials (when present) voice minor-triad / dim7 stabs.
@@ -689,17 +872,39 @@
 
   function triggerStep(step, time) {
     const pattern = state.pattern;
+    const voices = state.voices || {};
+    const classical = state.composerKind === "classical";
     if (pattern.kick[step] && !state.muted.kick) playKick(time);
     if (pattern.sub[step] && !state.muted.sub) playSub(time, step);
     if (pattern.closedHat[step] && !state.muted.closedHat) playClosedHat(time);
-    if (pattern.openHat[step] && !state.muted.openHat) playOpenHat(time);
-    if (pattern.clap[step] && !state.muted.clap) playClap(time);
-    if (pattern.perc && pattern.perc[step] && !state.muted.perc) playPerc(time, step);
+    if (pattern.openHat[step] && !state.muted.openHat) {
+      if (voices.openHat === "vocal") playVocalChop(time);
+      else playOpenHat(time);
+    }
+    if (pattern.clap[step] && !state.muted.clap) {
+      if (voices.clap === "parai") playParai(time);
+      else playClap(time);
+    }
+    if (pattern.perc && pattern.perc[step] && !state.muted.perc) {
+      if (voices.perc === "tavil") playTavil(time, step);
+      else playPerc(time, step);
+    }
     if (pattern.shaker && pattern.shaker[step] && !state.muted.shaker) playShaker(time);
     if (pattern.acid[step] && !state.muted.acid) {
       const extras = state.chordNotes && state.chordNotes[step] ? state.chordNotes[step] : null;
       const decay = state.noteDecay && state.noteDecay[step] ? state.noteDecay[step] : state.acidDecay;
-      playAcid(time, state.notes[step] || A2, extras, decay);
+      const freq = state.notes[step] || A2;
+      const lead = voices.acid || "synth";
+      if (lead === "flute") playFlute(time, freq, decay);
+      else if (lead === "hybrid") {
+        playFlute(time, freq, decay);
+        playAcid(time, freq, null, decay);
+      } else {
+        playAcid(time, freq, classical ? null : extras, decay);
+      }
+    }
+    if (classical && voices.pad && state.chordNotes && state.chordNotes[step] && !state.muted.acid) {
+      playPad(time, state.chordNotes[step]);
     }
   }
 
@@ -802,6 +1007,8 @@
     params.reverb = snapshot.fx.reverb;
     params.feedback = snapshot.fx.feedback;
     state.acidDecay = snapshot.fx.acidDecay || sixteenthDuration();
+    state.voices = snapshot.voices || null;
+    state.composerKind = snapshot.engine || (snapshot.session && snapshot.session.engine) || state.composerKind || "hardgroove";
     if (snapshot.fx.delayDivision) setDelayDivision(snapshot.fx.delayDivision);
     state.barsUntilEvolve = snapshot.nextInterval;
 
@@ -837,14 +1044,21 @@
       ? barsLeft + " bars"
       : "—";
     els.composerStatus.textContent = session && session.active
-      ? "Live · " + phase + (move ? " · " + move : "") + " · bar " + (session.bar || 0)
-      : "Idle — press COMPOSE HARDGROOVE to seed a new track.";
+      ? "Live · " + (state.composerKind === "classical" ? "Classical" : "Hardgroove") + " · " + phase + (move ? " · " + move : "") + " · bar " + (session.bar || 0)
+      : "Idle — press COMPOSE HARDGROOVE or CLASSICAL HARDGROOVE.";
   }
 
   function stopComposer(silent) {
     if (state.composer) state.composer.active = false;
     state.barsUntilEvolve = 0;
+    state.composerKind = null;
+    state.voices = null;
     if (!silent) updateComposerHud(null, "off");
+  }
+
+  function composerApi() {
+    if (state.composerKind === "classical" && window.Classical) return window.Classical;
+    return window.Hardgroove;
   }
 
   function onBarComplete() {
@@ -853,21 +1067,23 @@
     state.barsUntilEvolve -= 1;
     updateComposerHud({
       phase: state.composer.phase,
-      motif: state.composer.motif.degrees.join("-"),
-      harmony: state.composer.harmony,
+      motif: state.composer.raga
+        ? state.composer.raga.name + " " + state.composer.motif.degrees.join("-")
+        : state.composer.motif.degrees.join("-"),
+      harmony: state.composer.harmony || (state.composer.raga && state.composer.raga.name),
       lastMove: "",
     });
     if (state.barsUntilEvolve > 0) return;
-    if (typeof window.Hardgroove === "undefined") return;
-    const snapshot = window.Hardgroove.evolve(state.composer, readComposerControls());
+    const api = composerApi();
+    if (!api) return;
+    const snapshot = api.evolve(state.composer, readComposerControls());
     applySnapshot(snapshot, "EVO");
   }
 
-  async function composeHardgroove() {
-    if (typeof window.Hardgroove === "undefined") return;
-    const snapshot = window.Hardgroove.compose(readComposerControls());
+  async function startComposer(snapshot, reason) {
     state.composer = snapshot.session;
-    applySnapshot(snapshot, "SEED");
+    state.composerKind = snapshot.engine || snapshot.session.engine || "hardgroove";
+    applySnapshot(snapshot, reason);
     if (!state.playing) {
       await start();
       return;
@@ -876,6 +1092,17 @@
     if (state.ctx) {
       state.nextStepTime = state.ctx.currentTime + 0.05;
     }
+  }
+
+  async function composeHardgroove() {
+    if (typeof window.Hardgroove === "undefined") return;
+    await startComposer(window.Hardgroove.compose(readComposerControls()), "SEED");
+  }
+
+  async function composeClassical() {
+    if (typeof window.Classical === "undefined") return;
+    state.leadFrom = 0;
+    await startComposer(window.Classical.compose(readComposerControls()), "RAGA");
   }
 
   // ---------------------------------------------------------------------------
@@ -889,6 +1116,7 @@
     preset: document.getElementById("preset"),
     generateBtn: document.getElementById("generate-btn"),
     composeBtn: document.getElementById("compose-btn"),
+    composeClassicalBtn: document.getElementById("compose-classical-btn"),
     clearBtn: document.getElementById("clear-btn"),
     composerStatus: document.getElementById("composer-status"),
     composerSeed: document.getElementById("composer-seed"),
@@ -948,7 +1176,7 @@
       mute.className = "mute-btn" + (state.muted[track.id] ? " is-muted" : "");
       mute.textContent = "M";
       mute.setAttribute("aria-pressed", String(state.muted[track.id]));
-      mute.setAttribute("aria-label", "Mute " + track.name);
+      mute.setAttribute("aria-label", "Mute " + trackLabel(track));
       mute.addEventListener("click", () => {
         state.muted[track.id] = !state.muted[track.id];
         mute.classList.toggle("is-muted", state.muted[track.id]);
@@ -958,7 +1186,7 @@
 
       const name = document.createElement("span");
       name.className = "track-name";
-      name.textContent = track.name;
+      name.textContent = trackLabel(track);
       name.style.color = track.color;
 
       meta.append(mute, name);
@@ -972,7 +1200,7 @@
         btn.dataset.track = track.id;
         btn.dataset.step = String(i);
         btn.setAttribute("role", "gridcell");
-        btn.setAttribute("aria-label", track.name + " step " + (i + 1));
+        btn.setAttribute("aria-label", trackLabel(track) + " step " + (i + 1));
         const on = Boolean(state.pattern[track.id][i]);
         btn.classList.toggle("on", on);
         btn.setAttribute("aria-pressed", String(on));
@@ -1080,7 +1308,7 @@
   function matrixBlock() {
     return TRACKS.map((track) => {
       const mute = state.muted[track.id] ? "M" : ".";
-      return track.name.padEnd(7, " ") + " " + mute + " " + trackBits(track.id);
+      return trackLabel(track).padEnd(7, " ") + " " + mute + " " + trackBits(track.id);
     }).join("\n");
   }
 
@@ -1261,6 +1489,12 @@
     els.composeBtn.addEventListener("click", () => {
       composeHardgroove();
     });
+
+    if (els.composeClassicalBtn) {
+      els.composeClassicalBtn.addEventListener("click", () => {
+        composeClassical();
+      });
+    }
 
     els.clearBtn.addEventListener("click", () => {
       stopComposer(true);
