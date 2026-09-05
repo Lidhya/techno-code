@@ -40,8 +40,36 @@
     acid: "RAGA",
   };
 
+  // Mayamalavagowla from C3 — used when painting RAGA by hand (not the 303 scale).
+  const CLASSICAL_RAGA_HZ = [130.81, 138.59, 164.81, 174.61, 196.0, 207.65, 246.94, 261.63];
+
+  const MANUAL_CLASSICAL_VOICES = {
+    clap: "parai",
+    perc: "tavil",
+    acid: "flute",
+    openHat: "vocal",
+    pad: false,
+  };
+
+  function isClassicalMode() {
+    return state.uiMode === "classical";
+  }
+
+  function classicalVoices() {
+    return state.voices && state.composerKind === "classical"
+      ? state.voices
+      : MANUAL_CLASSICAL_VOICES;
+  }
+
+  function ragaFreq(step) {
+    if (state.composerKind === "classical" && state.notes && state.notes[step]) {
+      return state.notes[step];
+    }
+    return CLASSICAL_RAGA_HZ[step % CLASSICAL_RAGA_HZ.length];
+  }
+
   function trackLabel(track) {
-    if (state.uiMode === "classical") return CLASSICAL_NAMES[track.id] || track.name;
+    if (isClassicalMode()) return CLASSICAL_NAMES[track.id] || track.name;
     return track.name;
   }
 
@@ -135,6 +163,11 @@
     leadFrom: 0,
   };
 
+  const decks = {
+    acid: null,
+    classical: null,
+  };
+
   // Terminal feed for the master-bus overlay. Pattern bits stay in sync with the grid.
   const busLog = [];
 
@@ -168,35 +201,118 @@
     return pattern;
   }
 
-  /**
-   * Build a new 4-on-the-floor skeleton with randomized groove / acid notes.
-   * Kick stays on the quarter notes so the result still reads as techno.
-   */
-  function generatePattern() {
-    const pattern = emptyPattern();
-    pattern.kick = [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0];
-    if (Math.random() < 0.35) pattern.kick[14] = 1;
-    if (Math.random() < 0.25) pattern.kick[3] = 1;
+  function cloneChords(chords) {
+    if (!chords) return null;
+    return chords.map((chord) => (chord ? chord.slice() : null));
+  }
 
-    for (let i = 0; i < STEPS; i += 1) {
-      pattern.closedHat[i] = i % 2 === 1 && Math.random() < 0.92 ? 1 : Math.random() < 0.12 ? 1 : 0;
-      pattern.sub[i] = i % 4 === 2 || (i % 8 === 6 && Math.random() < 0.7) ? 1 : 0;
-      pattern.acid[i] = Math.random() < 0.45 ? 1 : 0;
+  function tiledRagaNotes() {
+    return new Array(STEPS).fill(0).map((_, i) => CLASSICAL_RAGA_HZ[i % CLASSICAL_RAGA_HZ.length]);
+  }
+
+  function blankClassicalDeck() {
+    return {
+      pattern: emptyPattern(),
+      notes: tiledRagaNotes(),
+      bassNotes: null,
+      chordNotes: null,
+      noteDecay: null,
+      muted: Object.fromEntries(TRACKS.map((track) => [track.id, false])),
+      composer: null,
+      composerKind: null,
+      voices: null,
+      barsUntilEvolve: 0,
+      leadFrom: 0,
+      currentStep: 0,
+      bpm: 127,
+      swing: 0.06,
+      delayDivision: 8,
+      acidDecay: (60 / 127 / 4) * 3,
+      fx: {
+        cutoff: 900,
+        resonance: 6,
+        drive: 0.12,
+        reverb: 0.32,
+        feedback: 0.22,
+      },
+    };
+  }
+
+  function captureDeck() {
+    return {
+      pattern: clonePattern(state.pattern),
+      notes: state.notes.slice(),
+      bassNotes: state.bassNotes ? state.bassNotes.slice() : null,
+      chordNotes: cloneChords(state.chordNotes),
+      noteDecay: state.noteDecay ? state.noteDecay.slice() : null,
+      muted: Object.assign({}, state.muted),
+      composer: state.composer,
+      composerKind: state.composerKind,
+      voices: state.voices,
+      barsUntilEvolve: state.barsUntilEvolve,
+      leadFrom: state.leadFrom,
+      currentStep: state.currentStep,
+      bpm: state.bpm,
+      swing: state.swing,
+      delayDivision: state.delayDivision,
+      acidDecay: state.acidDecay,
+      fx: {
+        cutoff: params.cutoff,
+        resonance: params.resonance,
+        drive: params.drive,
+        reverb: params.reverb,
+        feedback: params.feedback,
+      },
+    };
+  }
+
+  function restoreDeck(deck) {
+    state.pattern = clonePattern(deck.pattern);
+    state.notes = deck.notes.slice();
+    state.bassNotes = deck.bassNotes ? deck.bassNotes.slice() : null;
+    state.chordNotes = cloneChords(deck.chordNotes);
+    state.noteDecay = deck.noteDecay ? deck.noteDecay.slice() : null;
+    state.muted = Object.assign({}, deck.muted);
+    state.composer = deck.composer;
+    state.composerKind = deck.composerKind;
+    state.voices = deck.voices;
+    state.barsUntilEvolve = deck.barsUntilEvolve;
+    state.leadFrom = deck.leadFrom;
+    state.currentStep = deck.currentStep || 0;
+    state.bpm = deck.bpm;
+    state.swing = deck.swing;
+    state.acidDecay = deck.acidDecay;
+    params.cutoff = deck.fx.cutoff;
+    params.resonance = deck.fx.resonance;
+    params.drive = deck.fx.drive;
+    params.reverb = deck.fx.reverb;
+    params.feedback = deck.fx.feedback;
+    setDelayDivision(deck.delayDivision);
+    setSlider(els.bpm, els.bpmReadout, deck.bpm, "");
+    setSlider(els.swing, els.swingReadout, Math.round(deck.swing * 100), "%");
+    setSlider(els.cutoff, els.cutoffReadout, Math.round(deck.fx.cutoff), " Hz");
+    els.resonance.value = String(deck.fx.resonance);
+    els.resonanceReadout.textContent = Number(deck.fx.resonance).toFixed(1);
+    setSlider(els.drive, els.driveReadout, Math.round(deck.fx.drive * 100), "%");
+    setSlider(els.reverb, els.reverbReadout, Math.round(deck.fx.reverb * 100), "%");
+    setSlider(els.feedback, els.feedbackReadout, Math.round(deck.fx.feedback * 100), "%");
+    applyLiveParams();
+    syncDelayTime();
+    renderGrid();
+    renderBusOverlay();
+    if (state.composer && state.composer.active) {
+      updateComposerHud({
+        phase: state.composer.phase,
+        motif: state.composer.raga
+          ? state.composer.raga.name + " " + state.composer.motif.degrees.join("-")
+          : state.composer.motif.degrees.join("-"),
+        harmony: state.composer.harmony || (state.composer.raga && state.composer.raga.name) || "",
+        lastMove: "",
+      });
+    } else {
+      updateComposerHud(null);
     }
-
-    pattern.openHat[7] = 1;
-    pattern.openHat[15] = Math.random() < 0.8 ? 1 : 0;
-    pattern.clap[4] = 1;
-    pattern.clap[12] = 1;
-    if (Math.random() < 0.3) pattern.clap[10] = 1;
-
-    for (let i = 0; i < STEPS; i += 1) {
-      pattern.perc[i] = i % 4 !== 0 && Math.random() < 0.28 ? 1 : 0;
-      pattern.shaker[i] = i % 2 === 1 && Math.random() < 0.7 ? 1 : 0;
-    }
-
-    const notes = new Array(STEPS).fill(A2).map(() => ACID_SCALE[Math.floor(Math.random() * ACID_SCALE.length)]);
-    return { pattern, notes };
+    pushBusLine((state.uiMode === "classical" ? "CLS" : "ACD") + " " + packedPatternBits());
   }
 
   // ---------------------------------------------------------------------------
@@ -873,8 +989,8 @@
 
   function triggerStep(step, time) {
     const pattern = state.pattern;
-    const voices = state.voices || {};
-    const classical = state.composerKind === "classical";
+    const classical = isClassicalMode();
+    const voices = classical ? classicalVoices() : {};
     if (pattern.kick[step] && !state.muted.kick) playKick(time);
     if (pattern.sub[step] && !state.muted.sub) playSub(time, step);
     if (pattern.closedHat[step] && !state.muted.closedHat) playClosedHat(time);
@@ -893,15 +1009,19 @@
     if (pattern.shaker && pattern.shaker[step] && !state.muted.shaker) playShaker(time);
     if (pattern.acid[step] && !state.muted.acid) {
       const extras = state.chordNotes && state.chordNotes[step] ? state.chordNotes[step] : null;
-      const decay = state.noteDecay && state.noteDecay[step] ? state.noteDecay[step] : state.acidDecay;
-      const freq = state.notes[step] || A2;
+      const decay = state.noteDecay && state.noteDecay[step]
+        ? state.noteDecay[step]
+        : (classical ? sixteenthDuration() * 3 : state.acidDecay);
+      const freq = classical ? ragaFreq(step) : (state.notes[step] || A2);
       const lead = voices.acid || "synth";
       if (lead === "flute") playFlute(time, freq, decay);
       else if (lead === "hybrid") {
         playFlute(time, freq, decay);
         playAcid(time, freq, null, decay);
+      } else if (classical) {
+        playFlute(time, freq, decay);
       } else {
-        playAcid(time, freq, classical ? null : extras, decay);
+        playAcid(time, freq, extras, decay);
       }
     }
     if (classical && voices.pad && state.chordNotes && state.chordNotes[step] && !state.muted.acid) {
@@ -1052,6 +1172,14 @@
     syncEngineUi();
   }
 
+  function isModePlaying(mode) {
+    if (state.uiMode === mode) {
+      return Boolean(state.composer && state.composer.active);
+    }
+    const parked = decks[mode];
+    return Boolean(parked && parked.composer && parked.composer.active);
+  }
+
   function syncEngineUi() {
     const app = document.querySelector(".app");
     const mode = state.uiMode === "classical" ? "classical" : "acid";
@@ -1059,12 +1187,12 @@
     const live = state.composer && state.composer.active ? state.composerKind : null;
     if (els.modeAcid) {
       els.modeAcid.classList.toggle("is-active", mode === "acid");
-      els.modeAcid.classList.toggle("is-playing", live === "hardgroove");
+      els.modeAcid.classList.toggle("is-playing", isModePlaying("acid"));
       els.modeAcid.setAttribute("aria-selected", String(mode === "acid"));
     }
     if (els.modeClassical) {
       els.modeClassical.classList.toggle("is-active", mode === "classical");
-      els.modeClassical.classList.toggle("is-playing", live === "classical");
+      els.modeClassical.classList.toggle("is-playing", isModePlaying("classical"));
       els.modeClassical.setAttribute("aria-selected", String(mode === "classical"));
     }
     if (els.composeBtn) {
@@ -1083,11 +1211,14 @@
   }
 
   function setUiMode(mode) {
-    state.uiMode = mode === "classical" ? "classical" : "acid";
-    syncEngineUi();
-    renderGrid();
-    renderBusOverlay();
-    if (!state.composer || !state.composer.active) updateComposerHud(null);
+    const next = mode === "classical" ? "classical" : "acid";
+    if (next === state.uiMode) return;
+    decks[state.uiMode] = captureDeck();
+    if (!decks[next]) {
+      decks[next] = next === "classical" ? blankClassicalDeck() : captureDeck();
+    }
+    state.uiMode = next;
+    restoreDeck(decks[next]);
   }
 
   function stopComposer(silent) {
@@ -1158,7 +1289,6 @@
     grid: document.getElementById("grid"),
     ruler: document.getElementById("step-ruler"),
     preset: document.getElementById("preset"),
-    generateBtn: document.getElementById("generate-btn"),
     composeBtn: document.getElementById("compose-btn"),
     composeClassicalBtn: document.getElementById("compose-classical-btn"),
     modeAcid: document.getElementById("mode-acid"),
@@ -1520,19 +1650,6 @@
       loadPreset(els.preset.value);
     });
 
-    els.generateBtn.addEventListener("click", () => {
-      stopComposer(true);
-      const generated = generatePattern();
-      state.pattern = generated.pattern;
-      state.notes = generated.notes;
-      state.bassNotes = null;
-      state.chordNotes = null;
-      state.noteDecay = null;
-      renderGrid();
-      updateComposerHud(null, "gen");
-      pushBusLine("GEN " + packedPatternBits());
-    });
-
     if (els.modeAcid) {
       els.modeAcid.addEventListener("click", () => setUiMode("acid"));
     }
@@ -1556,6 +1673,10 @@
       state.bassNotes = null;
       state.chordNotes = null;
       state.noteDecay = null;
+      if (isClassicalMode()) {
+        state.notes = tiledRagaNotes();
+        state.leadFrom = 0;
+      }
       renderGrid();
       updateComposerHud(null, "clr");
       pushBusLine("CLR " + packedPatternBits());

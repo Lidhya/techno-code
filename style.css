@@ -409,6 +409,10 @@ select:hover {
   display: none;
 }
 
+.app[data-mode="classical"] .preset-label {
+  display: none;
+}
+
 .compose-btn {
   background: linear-gradient(180deg, #2a3310, #161c08);
   border-color: var(--lime);
