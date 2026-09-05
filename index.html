@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div class="app">
+  <div class="app" data-mode="acid">
     <!-- -------------------------------------------------------------------------
          Header: identity, live visualizer, and transport / master controls.
          Play is the AudioContext resume gesture required by browser autoplay policy.
@@ -32,7 +32,7 @@
       <div class="viz-wrap">
         <canvas id="visualizer" width="1920" height="400" aria-hidden="true"></canvas>
         <pre id="bus-code" class="bus-code" aria-hidden="true"></pre>
-        <div class="viz-label">Techno-Code</div>
+        <div class="viz-label">Techno-Code <span id="creator-label">By Lidhya</span></div>
       </div>
 
       <div class="transport" role="group" aria-label="Transport and master">
@@ -55,6 +55,18 @@
       </div>
     </header>
 
+    <!-- Engine workspace switch sits above the sequencer so mode is always visible. -->
+    <div class="studio-bar">
+      <div class="mode-switch" role="tablist" aria-label="Engine mode">
+        <button type="button" class="mode-tab is-active" id="mode-acid" data-mode="acid" role="tab" aria-selected="true">
+          ACID
+        </button>
+        <button type="button" class="mode-tab" id="mode-classical" data-mode="classical" role="tab" aria-selected="false">
+          CLASSICAL
+        </button>
+      </div>
+    </div>
+
     <!-- -------------------------------------------------------------------------
          16-step matrix. Rows = instruments, columns = 16th notes in one 4/4 bar.
          Grid cells are generated in app.js so track config stays in one place.
@@ -73,8 +85,8 @@
             </select>
           </label>
           <button id="generate-btn" type="button">GENERATE</button>
-          <button id="compose-btn" type="button" class="compose-btn">COMPOSE HARDGROOVE</button>
-          <button id="compose-classical-btn" type="button" class="compose-btn compose-btn-classical">CLASSICAL HARDGROOVE</button>
+          <button id="compose-btn" type="button" class="compose-btn" aria-pressed="false">COMPOSE HARDGROOVE</button>
+          <button id="compose-classical-btn" type="button" class="compose-btn compose-btn-classical" aria-pressed="false">COMPOSE CLASSICAL</button>
           <button id="clear-btn" type="button">CLEAR</button>
         </div>
       </div>
@@ -91,8 +103,8 @@
          ------------------------------------------------------------------------- -->
     <section class="panel composer-panel" aria-label="Hardgroove composer">
       <div class="panel-head">
-        <h2>COMPOSER</h2>
-        <p class="panel-note" id="composer-status">Idle — press COMPOSE HARDGROOVE or CLASSICAL HARDGROOVE.</p>
+        <h2 id="composer-title">ACID COMPOSER</h2>
+        <p class="panel-note" id="composer-status">Idle — press COMPOSE HARDGROOVE.</p>
       </div>
       <div class="composer-meta" aria-live="polite">
         <div><span class="meta-label">SEED</span><code id="composer-seed">—</code></div>

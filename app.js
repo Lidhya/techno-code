@@ -41,7 +41,7 @@
   };
 
   function trackLabel(track) {
-    if (state.composerKind === "classical") return CLASSICAL_NAMES[track.id] || track.name;
+    if (state.uiMode === "classical") return CLASSICAL_NAMES[track.id] || track.name;
     return track.name;
   }
 
@@ -130,6 +130,7 @@
     noteDecay: null,
     acidDecay: 0.1136,
     composerKind: null,
+    uiMode: "acid",
     voices: null,
     leadFrom: 0,
   };
@@ -1045,7 +1046,48 @@
       : "—";
     els.composerStatus.textContent = session && session.active
       ? "Live · " + (state.composerKind === "classical" ? "Classical" : "Hardgroove") + " · " + phase + (move ? " · " + move : "") + " · bar " + (session.bar || 0)
-      : "Idle — press COMPOSE HARDGROOVE or CLASSICAL HARDGROOVE.";
+      : (state.uiMode === "classical"
+        ? "Idle — press COMPOSE CLASSICAL."
+        : "Idle — press COMPOSE HARDGROOVE.");
+    syncEngineUi();
+  }
+
+  function syncEngineUi() {
+    const app = document.querySelector(".app");
+    const mode = state.uiMode === "classical" ? "classical" : "acid";
+    if (app) app.dataset.mode = mode;
+    const live = state.composer && state.composer.active ? state.composerKind : null;
+    if (els.modeAcid) {
+      els.modeAcid.classList.toggle("is-active", mode === "acid");
+      els.modeAcid.classList.toggle("is-playing", live === "hardgroove");
+      els.modeAcid.setAttribute("aria-selected", String(mode === "acid"));
+    }
+    if (els.modeClassical) {
+      els.modeClassical.classList.toggle("is-active", mode === "classical");
+      els.modeClassical.classList.toggle("is-playing", live === "classical");
+      els.modeClassical.setAttribute("aria-selected", String(mode === "classical"));
+    }
+    if (els.composeBtn) {
+      const on = live === "hardgroove";
+      els.composeBtn.classList.toggle("is-live", on);
+      els.composeBtn.setAttribute("aria-pressed", String(on));
+    }
+    if (els.composeClassicalBtn) {
+      const on = live === "classical";
+      els.composeClassicalBtn.classList.toggle("is-live", on);
+      els.composeClassicalBtn.setAttribute("aria-pressed", String(on));
+    }
+    if (els.composerTitle) {
+      els.composerTitle.textContent = mode === "classical" ? "CLASSICAL COMPOSER" : "ACID COMPOSER";
+    }
+  }
+
+  function setUiMode(mode) {
+    state.uiMode = mode === "classical" ? "classical" : "acid";
+    syncEngineUi();
+    renderGrid();
+    renderBusOverlay();
+    if (!state.composer || !state.composer.active) updateComposerHud(null);
   }
 
   function stopComposer(silent) {
@@ -1054,6 +1096,7 @@
     state.composerKind = null;
     state.voices = null;
     if (!silent) updateComposerHud(null, "off");
+    else syncEngineUi();
   }
 
   function composerApi() {
@@ -1083,6 +1126,7 @@
   async function startComposer(snapshot, reason) {
     state.composer = snapshot.session;
     state.composerKind = snapshot.engine || snapshot.session.engine || "hardgroove";
+    state.uiMode = state.composerKind === "classical" ? "classical" : "acid";
     applySnapshot(snapshot, reason);
     if (!state.playing) {
       await start();
@@ -1117,6 +1161,9 @@
     generateBtn: document.getElementById("generate-btn"),
     composeBtn: document.getElementById("compose-btn"),
     composeClassicalBtn: document.getElementById("compose-classical-btn"),
+    modeAcid: document.getElementById("mode-acid"),
+    modeClassical: document.getElementById("mode-classical"),
+    composerTitle: document.getElementById("composer-title"),
     clearBtn: document.getElementById("clear-btn"),
     composerStatus: document.getElementById("composer-status"),
     composerSeed: document.getElementById("composer-seed"),
@@ -1486,6 +1533,13 @@
       pushBusLine("GEN " + packedPatternBits());
     });
 
+    if (els.modeAcid) {
+      els.modeAcid.addEventListener("click", () => setUiMode("acid"));
+    }
+    if (els.modeClassical) {
+      els.modeClassical.addEventListener("click", () => setUiMode("classical"));
+    }
+
     els.composeBtn.addEventListener("click", () => {
       composeHardgroove();
     });
@@ -1519,6 +1573,7 @@
 
     bindGridPaint();
     window.addEventListener("resize", sizeCanvas);
+    syncEngineUi();
   }
 
   function clamp(value, min, max) {
